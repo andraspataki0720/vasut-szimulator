@@ -5,7 +5,7 @@
 * **Neptun kód:** <NEPTUN>
 * **Szak / Képzés:** Programtervező informatikus BSc (ELTE IK)
 * **Bemutató videó linkje (OneDrive):** [Videó megtekintése](https://...)
-* **A futtatható program linkje (Vercel, Netlify, Firebase, stb.):** <https://...>
+* **A futtatható program linkje (Vercel, Netlify, Firebase, stb.):** <https://andraspataki0720.github.io/vasut-szimulator/>
 
 ---
 
