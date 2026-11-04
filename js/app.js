@@ -1,9 +1,4 @@
-/**
- * js/app.js
- * Vezérlő modul (Controller).
- * Tartalmazza a 60 FPS játékhurkot (requestAnimationFrame), az eseménydelegálást,
- * a localStorage mentés/betöltés és ranglista logikát, valamint az inicializálást.
- */
+// Vezérlő modul: játékhurok, eseménykezelés, mentés/betöltés és ranglista
 
 import {
   CANVAS_WIDTH,
@@ -39,9 +34,6 @@ const appController = {
   outcomeHandled: false
 };
 
-/**
- * Helyi ranglista olvasása a localStorage-ból kivételkezeléssel
- */
 function loadAllLeaderboards() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_LEADERBOARD);
@@ -55,16 +47,12 @@ function loadAllLeaderboards() {
       3: Array.isArray(parsed[3]) ? parsed[3] : []
     };
   } catch (err) {
-    console.error('Hiba a ranglista betöltésekor:', err);
+    console.error('Ranglista olvasási hiba:', err);
     return { 1: [], 2: [], 3: [] };
   }
 }
 
-/**
- * Eredmény rögzítése és rangsorolása a Diszpécserek Dicsőségkönyvében:
- * Elsődlegesen a hibátlan teljesítés (errorCount növekvő),
- * másodlagosan a leggyorsabb időeredmény (elapsedSeconds növekvő) alapján.
- */
+// Új eredmény mentése a helyi ranglistába (hibapont, majd idő alapján rendezve)
 function recordLeaderboardEntry(state) {
   try {
     const boards = loadAllLeaderboards();
@@ -95,22 +83,16 @@ function recordLeaderboardEntry(state) {
     localStorage.setItem(STORAGE_KEY_LEADERBOARD, JSON.stringify(boards));
     refreshLeaderboardUI(appController.activeLeaderboardLevelId);
   } catch (err) {
-    console.error('Hiba a ranglista mentésekor:', err);
+    console.error('Ranglista mentési hiba:', err);
   }
 }
 
-/**
- * Ranglista megjelenítésének frissítése az adott szinthez
- */
 function refreshLeaderboardUI(levelId) {
   appController.activeLeaderboardLevelId = Number(levelId) || 1;
   const boards = loadAllLeaderboards();
   renderLeaderboard(boards[appController.activeLeaderboardLevelId] || [], appController.activeLeaderboardLevelId);
 }
 
-/**
- * Mentett játékállás előnézetének frissítése a főmenüben
- */
 function refreshSavedGamePreview() {
   const previewEl = document.querySelector('#saved-game-preview');
   if (!previewEl) {
@@ -129,17 +111,14 @@ function refreshSavedGamePreview() {
     const levelDef = LEVEL_DEFINITIONS[saved.levelId];
     const levelTitle = levelDef ? levelDef.fullTitle : `${saved.levelId}. szint`;
 
-    previewEl.textContent = `Mentett állás elérhető: ${saved.playerName} • ${levelTitle} • Idő: ${formatTimeMMSS(saved.elapsedTime)} • Célba ért: ${saved.arrivedCount}`;
+    previewEl.textContent = `Mentett játékállás: ${saved.playerName} | ${levelTitle} | Idő: ${formatTimeMMSS(saved.elapsedTime)} | Célba ért: ${saved.arrivedCount}`;
     previewEl.classList.remove('hidden');
   } catch (err) {
-    console.error('Mentett előnézet olvasási hiba:', err);
+    console.error('Mentett állás előnézet hiba:', err);
     previewEl.classList.add('hidden');
   }
 }
 
-/**
- * Aktuális játékállapot mentése a localStorage-ba JSON formátumban
- */
 function saveCurrentGame() {
   if (!appController.state) {
     return;
@@ -150,34 +129,31 @@ function saveCurrentGame() {
     localStorage.setItem(STORAGE_KEY_SAVE, JSON.stringify(serialized));
     refreshSavedGamePreview();
     appController.state.statusBanner = {
-      text: `💾 Játékállás sikeresen elmentve (${formatTimeMMSS(appController.state.elapsedTime)})!`,
+      text: `Játékállás elmentve (${formatTimeMMSS(appController.state.elapsedTime)}).`,
       type: 'success'
     };
     render(appController.ctx, appController.state);
   } catch (err) {
     console.error('Mentési hiba:', err);
     appController.state.statusBanner = {
-      text: `Hiba történt a játékállás mentésekor: ${err.message}`,
+      text: `Hiba a mentés során: ${err.message}`,
       type: 'danger'
     };
     render(appController.ctx, appController.state);
   }
 }
 
-/**
- * Korábban elmentett játékállás betöltése a localStorage-ból
- */
 function loadSavedGame() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SAVE);
     if (!raw) {
       const nameError = document.querySelector('#name-error');
       if (nameError && !document.querySelector('#start-screen').classList.contains('hidden')) {
-        nameError.textContent = 'Nem található korábban elmentett játékállás a böngészőben!';
+        nameError.textContent = 'Nem található korábban elmentett játékállás!';
         nameError.classList.remove('hidden');
       } else if (appController.state) {
         appController.state.statusBanner = {
-          text: 'Nem található korábban elmentett játékállás a helyi tárhelyen!',
+          text: 'Nincs elmentett játékállás a böngészőben!',
           type: 'warning'
         };
         render(appController.ctx, appController.state);
@@ -203,7 +179,7 @@ function loadSavedGame() {
     console.error('Betöltési hiba:', err);
     if (appController.state) {
       appController.state.statusBanner = {
-        text: `Hiba a mentett játékállás betöltésekor: ${err.message}`,
+        text: `Hiba a betöltéskor: ${err.message}`,
         type: 'danger'
       };
       render(appController.ctx, appController.state);
@@ -211,9 +187,6 @@ function loadSavedGame() {
   }
 }
 
-/**
- * Képernyők közötti SPA váltás ('start' | 'game')
- */
 function switchScreen(screenName) {
   const startScreen = document.querySelector('#start-screen');
   const gameScreen = document.querySelector('#game-screen');
@@ -234,9 +207,6 @@ function switchScreen(screenName) {
   }
 }
 
-/**
- * Játékos nevének validálása és szimuláció indítása az adott pályán
- */
 function startNewSimulation(levelId, explicitPlayerName = null) {
   const nameInput = document.querySelector('#player-name-input');
   const nameError = document.querySelector('#name-error');
@@ -251,7 +221,7 @@ function startNewSimulation(levelId, explicitPlayerName = null) {
       nameInput.focus();
     }
     if (nameError) {
-      nameError.textContent = 'Kérjük, add meg a játékos nevét a szimuláció indításához!';
+      nameError.textContent = 'A szimuláció indításához kötelező megadni a neved!';
       nameError.classList.remove('hidden');
     }
     return;
@@ -276,9 +246,7 @@ function startNewSimulation(levelId, explicitPlayerName = null) {
   }
 }
 
-/**
- * 60 FPS Játékhurok (kizárólag requestAnimationFrame használatával)
- */
+// 60 FPS játékhurok
 function gameLoop(timestamp) {
   if (!appController.lastFrameTime) {
     appController.lastFrameTime = timestamp;
@@ -306,16 +274,14 @@ function gameLoop(timestamp) {
         showOutcomeModal(appController.state);
       }
     } catch (err) {
-      console.error('Játékhurok futási hiba:', err);
+      console.error('Játékhurok hiba:', err);
     }
   }
 
   appController.animationFrameId = requestAnimationFrame(gameLoop);
 }
 
-/**
- * Egérkattintás koordinátáinak átszámítása a reszponzív Canvas belső (1040×540) koordináta-rendszerébe
- */
+// Egérpozíció átszámítása a Canvas belső méretére
 function getCanvasCoordinates(event) {
   const rect = appController.canvas.getBoundingClientRect();
   const scaleX = CANVAS_WIDTH / rect.width;
@@ -326,9 +292,6 @@ function getCanvasCoordinates(event) {
   };
 }
 
-/**
- * Eseménydelegálás és interakciók regisztrálása
- */
 function setupEventDelegation() {
   const appShell = document.querySelector('.app-shell');
   const nameInput = document.querySelector('#player-name-input');
@@ -347,16 +310,14 @@ function setupEventDelegation() {
   if (hudLevelSelect) {
     hudLevelSelect.addEventListener('change', (event) => {
       const newLevelId = Number(event.target.value) || 1;
-      const currentName = appController.state ? appController.state.playerName : 'Diszpécser';
+      const currentName = appController.state ? appController.state.playerName : 'Játékos';
       appController.selectedMenuLevelId = newLevelId;
       startNewSimulation(newLevelId, currentName);
     });
   }
 
-  // Dokumentum szintű kattintás-eseménydelegálás
   if (appShell) {
     appShell.addEventListener('click', (event) => {
-      // 1. Pályaválasztó kártya a kezdőképernyőn
       const levelCard = event.target.closest('.level-card');
       if (levelCard) {
         const chosenId = Number(levelCard.dataset.levelId) || 1;
@@ -368,14 +329,12 @@ function setupEventDelegation() {
         return;
       }
 
-      // 2. Ranglista fülváltás
       const tabBtn = event.target.closest('.tab-btn');
       if (tabBtn && tabBtn.dataset.leaderboardLevel) {
         refreshLeaderboardUI(Number(tabBtn.dataset.leaderboardLevel));
         return;
       }
 
-      // 3. Gombok kezelése azonosító alapján
       const button = event.target.closest('button');
       if (!button) {
         return;
@@ -426,14 +385,14 @@ function setupEventDelegation() {
           if (appController.state.status === 'running') {
             appController.state.status = 'paused';
             appController.state.statusBanner = {
-              text: '⏸ Szimuláció szüneteltetve. Az időmérés áll.',
+              text: 'Szimuláció szüneteltetve.',
               type: 'warning'
             };
           } else if (appController.state.status === 'paused') {
             appController.state.status = 'running';
             appController.lastFrameTime = performance.now();
             appController.state.statusBanner = {
-              text: '▶ Szimuláció folytatva.',
+              text: 'Szimuláció folytatva.',
               type: 'info'
             };
           }
@@ -476,7 +435,6 @@ function setupEventDelegation() {
     });
   }
 
-  // Canvas interakciók: Bal egérgomb (váltók és fényjelzők) + Jobb egérgomb (vészfékezés)
   if (appController.canvas) {
     appController.canvas.addEventListener('click', (event) => {
       if (!appController.state) {
@@ -503,19 +461,16 @@ function setupEventDelegation() {
   }
 }
 
-/**
- * Alkalmazás inicializálása (ES6 modulként automatikusan a DOM felépülése után fut le)
- */
 function initApp() {
   try {
     const canvas = document.querySelector('#railway-canvas');
     if (!canvas) {
-      throw new Error('A #railway-canvas elem nem található a dokumentumban.');
+      throw new Error('A #railway-canvas elem nem található.');
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      throw new Error('A HTML5 Canvas 2D kontextus nem inicializálható.');
+      throw new Error('A Canvas 2D kontextus nem érhető el.');
     }
 
     appController.canvas = canvas;
@@ -528,7 +483,7 @@ function initApp() {
     appController.lastFrameTime = performance.now();
     appController.animationFrameId = requestAnimationFrame(gameLoop);
   } catch (err) {
-    console.error('Kritikus inicializálási hiba:', err);
+    console.error('Inicializálási hiba:', err);
   }
 }
 

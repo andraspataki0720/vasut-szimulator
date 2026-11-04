@@ -1,8 +1,4 @@
-/**
- * js/state.js
- * Tiszta adatreprezentáció és szimulációs fizikai/gráfmodell modul.
- * Nem tartalmaz semmilyen DOM lekérdezést vagy megjelenítési hívást!
- */
+// Állapottér, pályagráfok és fizikai számítások (DOM hívások nélkül)
 
 export const CANVAS_WIDTH = 1040;
 export const CANVAS_HEIGHT = 540;
@@ -21,41 +17,30 @@ export const COLORS = {
   green: { key: 'green', name: 'Zöld', hex: '#10b981', border: '#a7f3d0' }
 };
 
-/**
- * 2D lineáris vektorinterpoláció (LERP):
- * P(t) = P1 + t * (P2 - P1), ahol t in [0, 1]
- */
+// 2D lineáris interpoláció két pont között (t: 0..1)
 export function lerp2D(p1, p2, t) {
-  const clampedT = Math.max(0, Math.min(1, t));
+  const clamped = Math.max(0, Math.min(1, t));
   return {
-    x: p1.x + (p2.x - p1.x) * clampedT,
-    y: p1.y + (p2.y - p1.y) * clampedT
+    x: p1.x + (p2.x - p1.x) * clamped,
+    y: p1.y + (p2.y - p1.y) * clamped
   };
 }
 
-/**
- * Euklideszi távolságszámítás két 2D pont között:
- * d = sqrt((x2 - x1)^2 + (y2 - y1)^2)
- */
+// Két pont távolsága (Pitagorasz-tétel)
 export function euclideanDistance(p1, p2) {
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
   return Math.hypot(dx, dy);
 }
 
-/**
- * Másodperc formázása perc:másodperc (MM:SS) alakba
- */
 export function formatTimeMMSS(totalSeconds) {
-  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
-  const mins = Math.floor(safeSeconds / 60);
-  const secs = safeSeconds % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const mins = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
 }
 
-/**
- * A három rögzített topológiájú pálya definíciója.
- */
+// A 3 beépített pálya adatai
 export const LEVEL_DEFINITIONS = {
   1: {
     id: 1,
@@ -201,32 +186,24 @@ export const LEVEL_DEFINITIONS = {
   }
 };
 
-/**
- * Csomópont megkeresése azonosító alapján
- */
 export function getNodeById(state, nodeId) {
   return state.nodes.find((n) => n.id === nodeId) || null;
 }
 
-/**
- * Él megkeresése azonosító alapján
- */
 export function getEdgeById(state, edgeId) {
   return state.edges.find((e) => e.id === edgeId) || null;
 }
 
-/**
- * Él geometriai adatainak (kezdőpont, végpont, hossz, irányvektor) kiszámítása
- */
+// Él hossza, irányvektora és szöge
 export function getEdgeGeometry(state, edgeId) {
   const edge = getEdgeById(state, edgeId);
   if (!edge) {
-    throw new Error(`Ismeretlen vágányél azonosító: ${edgeId}`);
+    throw new Error(`Nem létező él: ${edgeId}`);
   }
   const fromNode = getNodeById(state, edge.from);
   const toNode = getNodeById(state, edge.to);
   if (!fromNode || !toNode) {
-    throw new Error(`Hiányzó csomópont az élhez: ${edgeId}`);
+    throw new Error(`Hiányzó csomópont: ${edgeId}`);
   }
   const length = Math.max(1, euclideanDistance(fromNode, toNode));
   const dirX = (toNode.x - fromNode.x) / length;
@@ -235,9 +212,6 @@ export function getEdgeGeometry(state, edgeId) {
   return { fromNode, toNode, length, dirX, dirY, angle };
 }
 
-/**
- * Fényjelző fizikai koordinátájának kiszámítása a vágányélen
- */
 export function getSignalPosition(state, signal) {
   const geom = getEdgeGeometry(state, signal.edgeId);
   const point = lerp2D(geom.fromNode, geom.toNode, signal.progress);
@@ -249,74 +223,46 @@ export function getSignalPosition(state, signal) {
   };
 }
 
-/**
- * Új játékállapot létrehozása a kiválasztott pálya és játékosnév alapján
- */
-export function createGameState(levelId = 1, playerName = 'Diszpécser') {
-  const numericLevelId = Number(levelId) || 1;
-  const def = LEVEL_DEFINITIONS[numericLevelId];
+export function createGameState(levelId = 1, playerName = 'Játékos') {
+  const id = Number(levelId) || 1;
+  const def = LEVEL_DEFINITIONS[id];
   if (!def) {
-    throw new Error(`Érvénytelen pályaszint azonosító: ${levelId}`);
+    throw new Error(`Ismeretlen pálya: ${levelId}`);
   }
 
-  const nodes = def.nodes.map((n) => ({ ...n }));
-  const edges = def.edges.map((e) => ({ ...e }));
-  const switches = def.switches.map((sw) => ({
-    ...sw,
-    branches: [...sw.branches]
-  }));
-  const signals = def.signals.map((sig) => ({ ...sig }));
-  const schedule = def.schedule.map((item) => ({
-    ...item,
-    spawned: false
-  }));
-
   return {
-    playerName: String(playerName || 'Diszpécser').trim(),
+    playerName: String(playerName || 'Játékos').trim(),
     levelId: def.id,
     levelName: def.name,
     difficulty: def.difficulty,
     fullTitle: def.fullTitle,
-    status: 'running', // 'running' | 'paused' | 'victory' | 'gameover'
+    status: 'running',
     elapsedTime: 0,
-    totalTrains: schedule.length,
+    totalTrains: def.schedule.length,
     arrivedCount: 0,
     errorCount: 0,
-    nodes,
-    edges,
-    switches,
-    signals,
-    schedule,
+    nodes: def.nodes.map((n) => ({ ...n })),
+    edges: def.edges.map((e) => ({ ...e })),
+    switches: def.switches.map((sw) => ({ ...sw, branches: [...sw.branches] })),
+    signals: def.signals.map((sig) => ({ ...sig })),
+    schedule: def.schedule.map((item) => ({ ...item, spawned: false })),
     trains: [],
     dangerPairs: [],
     visualEffects: [],
     explosion: null,
     deadlockWarning: false,
     statusBanner: {
-      text: `${def.fullTitle} elindult. Irányítsd biztonságosan a szerelvényeket!`,
+      text: `${def.fullTitle} elindult.`,
       type: 'info'
     },
     outcomeReason: ''
   };
 }
 
-/**
- * Vizuális effekt hozzáadása a Canvas-hoz (pl. kisiklás, célba érés, téves peron)
- */
-function addVisualEffect(state, x, y, text, color, duration = 2.4) {
-  state.visualEffects.push({
-    x,
-    y,
-    text,
-    color,
-    age: 0,
-    duration
-  });
+function addVisualEffect(state, x, y, text, color, duration = 2.2) {
+  state.visualEffects.push({ x, y, text, color, age: 0, duration });
 }
 
-/**
- * Következő csomópontból induló él meghatározása
- */
 function resolveNextEdgeFromNode(state, node) {
   if (node.type === 'switch') {
     const sw = state.switches.find((s) => s.nodeId === node.id);
@@ -334,9 +280,7 @@ function resolveNextEdgeFromNode(state, node) {
   return null;
 }
 
-/**
- * Vonat indítása a menetrend alapján, ha a belépési zóna szabad
- */
+// Menetrend szerinti vonatindítás
 function updateTrainSpawning(state) {
   for (const item of state.schedule) {
     if (item.spawned) {
@@ -349,11 +293,10 @@ function updateTrainSpawning(state) {
         continue;
       }
 
-      // Ellenőrizzük, hogy nincs-e közvetlenül a belépési ponton másik szerelvény
-      const blockedByTrain = state.trains.some(
+      const blocked = state.trains.some(
         (t) => t.active && euclideanDistance(t, entryNode) < 68
       );
-      if (blockedByTrain) {
+      if (blocked) {
         continue;
       }
 
@@ -388,22 +331,19 @@ function updateTrainSpawning(state) {
 
       const colorInfo = COLORS[item.targetColor];
       state.statusBanner = {
-        text: `Új szerelvény lépett a pályára: ${item.trainName} → Cél: ${colorInfo ? colorInfo.name : item.targetColor} peron.`,
+        text: `Érkező vonat: ${item.trainName} (Cél: ${colorInfo ? colorInfo.name : item.targetColor} peron)`,
         type: 'info'
       };
     }
   }
 }
 
-/**
- * Egyetlen szerelvény mozgatása a topológiai gráfon dt időegységgel
- */
+// Egy vonat léptetése a gráfon
 function moveSingleTrain(state, train, dt) {
   if (!train.active) {
     return;
   }
 
-  // Kézi vészfékezés ellenőrzése
   if (train.manualBrake) {
     train.speed = 0;
     train.waitingAtSignal = false;
@@ -413,16 +353,16 @@ function moveSingleTrain(state, train, dt) {
 
   const geom = getEdgeGeometry(state, train.edgeId);
 
-  // Ellenőrizzük, van-e vörös fényjelző a vonat előtt az aktuális élen
+  // Vörös jelzőlámpa figyelése az adott élen
   const signalOnEdge = state.signals.find((s) => s.edgeId === train.edgeId);
-  const stopOffsetNormalized = 22 / geom.length;
+  const stopOffset = 22 / geom.length;
 
   if (signalOnEdge && !signalOnEdge.isGreen) {
-    const stopProgress = Math.max(0.05, signalOnEdge.progress - stopOffsetNormalized);
-    if (train.progress <= stopProgress + 0.02) {
-      const nextProgressCandidate = train.progress + (train.baseSpeed * dt) / geom.length;
-      if (nextProgressCandidate >= stopProgress) {
-        train.progress = stopProgress;
+    const stopPos = Math.max(0.05, signalOnEdge.progress - stopOffset);
+    if (train.progress <= stopPos + 0.02) {
+      const nextPos = train.progress + (train.baseSpeed * dt) / geom.length;
+      if (nextPos >= stopPos) {
+        train.progress = stopPos;
         const pos = lerp2D(geom.fromNode, geom.toNode, train.progress);
         train.x = pos.x;
         train.y = pos.y;
@@ -438,15 +378,15 @@ function moveSingleTrain(state, train, dt) {
   train.stateLabel = '';
   train.speed = train.baseSpeed;
 
-  let remainingDistance = train.baseSpeed * dt;
+  let remainingDist = train.baseSpeed * dt;
 
-  while (remainingDistance > 0 && train.active) {
+  while (remainingDist > 0 && train.active) {
     const currentGeom = getEdgeGeometry(state, train.edgeId);
     const distToEnd = (1 - train.progress) * currentGeom.length;
 
-    if (remainingDistance < distToEnd) {
-      train.progress += remainingDistance / currentGeom.length;
-      remainingDistance = 0;
+    if (remainingDist < distToEnd) {
+      train.progress += remainingDist / currentGeom.length;
+      remainingDist = 0;
       const pos = lerp2D(currentGeom.fromNode, currentGeom.toNode, train.progress);
       train.x = pos.x;
       train.y = pos.y;
@@ -454,52 +394,49 @@ function moveSingleTrain(state, train, dt) {
       train.dirY = currentGeom.dirY;
       train.angle = currentGeom.angle;
     } else {
-      remainingDistance -= distToEnd;
+      remainingDist -= distToEnd;
       const targetNode = currentGeom.toNode;
       train.x = targetNode.x;
       train.y = targetNode.y;
 
-      // Célállomás (peron) elérése
       if (targetNode.type === 'station') {
         train.active = false;
         if (targetNode.color === train.targetColor) {
           state.arrivedCount += 1;
-          addVisualEffect(state, targetNode.x - 40, targetNode.y - 25, '✓ CÉLBA ÉRT', '#10b981');
+          addVisualEffect(state, targetNode.x - 40, targetNode.y - 25, 'CÉLBA ÉRT', '#10b981');
           state.statusBanner = {
-            text: `${train.trainName} sikeresen befutott a helyes (${targetNode.label}) peronra!`,
+            text: `${train.trainName} megérkezett a helyes (${targetNode.label}) peronra.`,
             type: 'success'
           };
         } else {
           state.errorCount += 1;
-          addVisualEffect(state, targetNode.x - 50, targetNode.y - 25, '✗ TÉVES PERON! (+1 Hiba)', '#f59e0b');
+          addVisualEffect(state, targetNode.x - 50, targetNode.y - 25, 'TÉVES PERON (+1 Hiba)', '#f59e0b');
           state.statusBanner = {
-            text: `Hiba! ${train.trainName} téves célállomásra (${targetNode.label}) érkezett! (+1 hibapont)`,
+            text: `Hiba: ${train.trainName} rossz peronra (${targetNode.label}) futott be!`,
             type: 'warning'
           };
         }
         return;
       }
 
-      // Nyitott vágányvég (csonkavágány) -> Kisiklás!
       if (targetNode.type === 'deadend') {
         train.active = false;
         state.errorCount += 1;
-        addVisualEffect(state, targetNode.x - 45, targetNode.y - 24, '💥 KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
+        addVisualEffect(state, targetNode.x - 45, targetNode.y - 24, 'KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
         state.statusBanner = {
-          text: `Kisiklás! ${train.trainName} nyitott vágányvégre futott! (+1 hibapont)`,
+          text: `Kisiklás: ${train.trainName} nyitott vágányvégre futott!`,
           type: 'danger'
         };
         return;
       }
 
-      // Továbbhaladás váltón vagy köztes csomóponton keresztül
       const nextEdgeId = resolveNextEdgeFromNode(state, targetNode);
       if (!nextEdgeId) {
         train.active = false;
         state.errorCount += 1;
-        addVisualEffect(state, targetNode.x, targetNode.y - 20, '💥 KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
+        addVisualEffect(state, targetNode.x, targetNode.y - 20, 'KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
         state.statusBanner = {
-          text: `Kisiklás! ${train.trainName} nem bekötött váltóra futott! (+1 hibapont)`,
+          text: `Kisiklás: ${train.trainName} nem bekötött váltóra futott!`,
           type: 'danger'
         };
         return;
@@ -515,9 +452,7 @@ function moveSingleTrain(state, train, dt) {
   }
 }
 
-/**
- * Fizikai ütközésvizsgálat és korai veszélyjelzés (75px biztonsági zóna)
- */
+// Ütközés és 75px-es veszélyzóna ellenőrzése
 function checkCollisionsAndWarnings(state) {
   state.dangerPairs = [];
   const activeTrains = state.trains.filter((t) => t.active);
@@ -533,21 +468,17 @@ function checkCollisionsAndWarnings(state) {
       const tB = activeTrains[j];
       const dist = euclideanDistance(tA, tB);
 
-      // Kritikus ütközés -> Katasztrófa (Game Over)
       if (dist < COLLISION_DISTANCE) {
         tA.active = false;
         tB.active = false;
-        const midX = (tA.x + tB.x) / 2;
-        const midY = (tA.y + tB.y) / 2;
-
         state.explosion = {
-          x: midX,
-          y: midY,
+          x: (tA.x + tB.x) / 2,
+          y: (tA.y + tB.y) / 2,
           trainAName: tA.trainName,
           trainBName: tB.trainName
         };
         state.status = 'gameover';
-        state.outcomeReason = `Katasztrófa! ${tA.trainName} és ${tB.trainName} összeütközött a nyílt pályán!`;
+        state.outcomeReason = `Katasztrófa! ${tA.trainName} és ${tB.trainName} összeütközött a pályán!`;
         state.statusBanner = {
           text: state.outcomeReason,
           type: 'danger'
@@ -555,7 +486,6 @@ function checkCollisionsAndWarnings(state) {
         return;
       }
 
-      // Korai figyelmeztetés: 75 képpontos biztonsági zónán belül
       if (dist < WARNING_DISTANCE) {
         const severity = dist < CRITICAL_WARNING_DISTANCE ? 'critical' : 'warning';
         tA.inDanger = true;
@@ -579,15 +509,12 @@ function checkCollisionsAndWarnings(state) {
 
   if (state.dangerPairs.length > 0 && state.status === 'running') {
     state.statusBanner = {
-      text: '⚠️ Ütközésveszély! Két szerelvény biztonsági távolságon (75px) belülre került! Használj vészféket (jobb klikk)!',
+      text: 'Ütközésveszély! Két vonat túl közel került egymáshoz (használj jobb klikkes vészféket)!',
       type: 'warning'
     };
   }
 }
 
-/**
- * Holtpont (Deadlock) figyelése és futam végi győzelmi feltétel ellenőrzése
- */
 function checkSimulationCompletion(state) {
   if (state.status !== 'running') {
     return;
@@ -596,20 +523,18 @@ function checkSimulationCompletion(state) {
   const allSpawned = state.schedule.every((item) => item.spawned);
   const activeTrains = state.trains.filter((t) => t.active);
 
-  // Holtpont (Deadlock) figyelmeztetés, ha minden aktív vonat áll
   if (activeTrains.length > 0 && activeTrains.every((t) => t.manualBrake || t.waitingAtSignal)) {
     state.deadlockWarning = true;
   } else {
     state.deadlockWarning = false;
   }
 
-  // Ha minden menetrendi szerelvény feldolgozásra került
   if (allSpawned && activeTrains.length === 0) {
     state.status = 'victory';
     if (state.errorCount === 0) {
-      state.outcomeReason = 'Tökéletes forgalomirányítás! Minden szerelvény baleset- és hibamentesen befutott a kijelölt peronjára.';
+      state.outcomeReason = 'Sikeres teljesítés! Minden vonat hibátlanul befutott a saját peronjára.';
     } else {
-      state.outcomeReason = `A menetrend véget ért, de ${state.errorCount} hibapont (kisiklás vagy téves peron) keletkezett.`;
+      state.outcomeReason = `A menetrend lefutott, de közben ${state.errorCount} hibapont keletkezett.`;
     }
     state.statusBanner = {
       text: state.outcomeReason,
@@ -618,9 +543,6 @@ function checkSimulationCompletion(state) {
   }
 }
 
-/**
- * A szimuláció fő állapotfrissítő lépése (dt másodperc időközzel)
- */
 export function updateSimulation(state, dt) {
   if (!state || state.status !== 'running') {
     return;
@@ -629,7 +551,6 @@ export function updateSimulation(state, dt) {
   const safeDt = Math.min(0.05, Math.max(0, Number(dt) || 0));
   state.elapsedTime += safeDt;
 
-  // Lebegő vizuális effektek öregítése
   for (let i = state.visualEffects.length - 1; i >= 0; i -= 1) {
     state.visualEffects[i].age += safeDt;
     if (state.visualEffects[i].age >= state.visualEffects[i].duration) {
@@ -649,34 +570,30 @@ export function updateSimulation(state, dt) {
   checkSimulationCompletion(state);
 }
 
-/**
- * Bal egérgomb kattintás kezelése a Canvas koordinátáin (váltó vagy fényjelző)
- */
+// Bal egérgomb: váltó vagy fényjelző átkapcsolása
 export function handleCanvasLeftClick(state, canvasX, canvasY) {
   if (!state || (state.status !== 'running' && state.status !== 'paused')) {
     return false;
   }
 
-  const clickPoint = { x: canvasX, y: canvasY };
+  const clickPt = { x: canvasX, y: canvasY };
 
-  // 1. Váltók ellenőrzése
   for (const sw of state.switches) {
     const node = getNodeById(state, sw.nodeId);
     if (!node) {
       continue;
     }
 
-    if (euclideanDistance(clickPoint, node) <= SWITCH_HIT_RADIUS) {
-      // Ellenőrizzük, halad-e éppen vonat közvetlenül a váltó csomópontján
+    if (euclideanDistance(clickPt, node) <= SWITCH_HIT_RADIUS) {
       const trainOnSwitch = state.trains.find(
         (t) => t.active && euclideanDistance(t, node) < 14
       );
       if (trainOnSwitch) {
         trainOnSwitch.active = false;
         state.errorCount += 1;
-        addVisualEffect(state, node.x - 45, node.y - 25, '💥 KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
+        addVisualEffect(state, node.x - 45, node.y - 25, 'KISIKLÁS! (+1 Hiba)', '#ef4444', 3.0);
         state.statusBanner = {
-          text: `Kisiklás! A(z) ${node.label} váltót közvetlenül az áthaladó ${trainOnSwitch.trainName} alatt állítottad át!`,
+          text: `Kisiklás: a(z) ${node.label} váltót az áthaladó ${trainOnSwitch.trainName} alatt állítottad át!`,
           type: 'danger'
         };
         checkSimulationCompletion(state);
@@ -687,26 +604,25 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
       const activeEdge = getEdgeById(state, sw.branches[sw.activeBranchIndex]);
       const targetNode = activeEdge ? getNodeById(state, activeEdge.to) : null;
       state.statusBanner = {
-        text: `Váltó (${node.label}) átállítva → irány: ${targetNode && targetNode.label ? targetNode.label : 'következő vágányág'}.`,
+        text: `Váltó (${node.label}) átállítva -> ${targetNode && targetNode.label ? targetNode.label : 'következő ág'}.`,
         type: 'info'
       };
       return true;
     }
   }
 
-  // 2. Kétoptikás fényjelzők ellenőrzése
   for (const sig of state.signals) {
     const sigPos = getSignalPosition(state, sig);
-    const hitCenter = { x: sigPos.x, y: sigPos.y };
-    const trackCenter = { x: sigPos.trackX, y: sigPos.trackY };
+    const headPt = { x: sigPos.x, y: sigPos.y };
+    const trackPt = { x: sigPos.trackX, y: sigPos.trackY };
 
     if (
-      euclideanDistance(clickPoint, hitCenter) <= SIGNAL_HIT_RADIUS ||
-      euclideanDistance(clickPoint, trackCenter) <= 18
+      euclideanDistance(clickPt, headPt) <= SIGNAL_HIT_RADIUS ||
+      euclideanDistance(clickPt, trackPt) <= 18
     ) {
       sig.isGreen = !sig.isGreen;
       state.statusBanner = {
-        text: `Fényjelző (${sig.label}) átkapcsolva: ${sig.isGreen ? 'ZÖLD (Szabad az út!)' : 'VÖRÖS (Megállj!)'}.`,
+        text: `Fényjelző (${sig.label}): ${sig.isGreen ? 'ZÖLD (Szabad)' : 'VÖRÖS (Megállj!)'}.`,
         type: sig.isGreen ? 'success' : 'warning'
       };
       return true;
@@ -716,28 +632,26 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
   return false;
 }
 
-/**
- * Jobb egérgomb kattintás kezelése a Canvas koordinátáin (Kézi vészfékezés)
- */
+// Jobb egérgomb: kézi vészfékezés
 export function handleCanvasRightClick(state, canvasX, canvasY) {
   if (!state || (state.status !== 'running' && state.status !== 'paused')) {
     return false;
   }
 
-  const clickPoint = { x: canvasX, y: canvasY };
+  const clickPt = { x: canvasX, y: canvasY };
 
   for (const train of state.trains) {
     if (!train.active) {
       continue;
     }
 
-    if (euclideanDistance(clickPoint, train) <= TRAIN_HIT_RADIUS) {
+    if (euclideanDistance(clickPt, train) <= TRAIN_HIT_RADIUS) {
       train.manualBrake = !train.manualBrake;
       train.stateLabel = train.manualBrake ? 'FÉK' : (train.waitingAtSignal ? 'TILOS' : '');
       state.statusBanner = {
         text: train.manualBrake
-          ? `🛑 Kézi vészfékezés aktiválva: ${train.trainName} megállt!`
-          : `▶ Vészfék feloldva: ${train.trainName} folytatja útját.`,
+          ? `Vészfék bekapcsolva: ${train.trainName} megállt.`
+          : `Vészfék feloldva: ${train.trainName} továbbindul.`,
         type: train.manualBrake ? 'warning' : 'info'
       };
       return true;
@@ -747,12 +661,9 @@ export function handleCanvasRightClick(state, canvasX, canvasY) {
   return false;
 }
 
-/**
- * Játékállás szerializálása JSON mentéshez (localStorage előírások szerint)
- */
 export function serializeState(state) {
   if (!state) {
-    throw new Error('Nincs menthető játékállapot.');
+    throw new Error('Nincs menthető állapot.');
   }
 
   return {
@@ -796,12 +707,9 @@ export function serializeState(state) {
   };
 }
 
-/**
- * Mentett JSON állapot visszaállítása teljes szimulációs állapottérré
- */
 export function deserializeState(payload) {
   if (!payload || typeof payload !== 'object') {
-    throw new Error('Érvénytelen vagy sérült mentési adat.');
+    throw new Error('Hibás mentési adat.');
   }
 
   const restored = createGameState(payload.levelId, payload.playerName);
@@ -847,7 +755,7 @@ export function deserializeState(payload) {
   }
 
   restored.statusBanner = {
-    text: `Mentett játékállás sikeresen betöltve (${restored.playerName} – ${formatTimeMMSS(restored.elapsedTime)}).`,
+    text: `Mentett állás betöltve (${restored.playerName}, idő: ${formatTimeMMSS(restored.elapsedTime)}).`,
     type: 'success'
   };
 

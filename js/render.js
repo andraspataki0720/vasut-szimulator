@@ -1,9 +1,4 @@
-/**
- * js/render.js
- * Deklaratív megjelenítő modul (UI = render(data)).
- * Feladata a HTML5 Canvas 2D törlése és újrarajzolása (save/restore védelemmel),
- * valamint a HUD szöveges mezőinek és a modális/ranglista felületeknek a frissítése.
- */
+// Megjelenítő modul: Canvas 2D kirajzolás és HUD szövegek frissítése
 
 import {
   CANVAS_WIDTH,
@@ -17,9 +12,6 @@ import {
   formatTimeMMSS
 } from './state.js';
 
-/**
- *Háttérrács kirajzolása a diszpécseri képernyő hangulatához
- */
 function drawBackgroundGrid(ctx) {
   ctx.save();
   ctx.fillStyle = '#060911';
@@ -27,16 +19,16 @@ function drawBackgroundGrid(ctx) {
 
   ctx.strokeStyle = 'rgba(30, 41, 59, 0.35)';
   ctx.lineWidth = 1;
-  const gridStep = 40;
+  const step = 40;
 
-  for (let x = 0; x <= CANVAS_WIDTH; x += gridStep) {
+  for (let x = 0; x <= CANVAS_WIDTH; x += step) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, CANVAS_HEIGHT);
     ctx.stroke();
   }
 
-  for (let y = 0; y <= CANVAS_HEIGHT; y += gridStep) {
+  for (let y = 0; y <= CANVAS_HEIGHT; y += step) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(CANVAS_WIDTH, y);
@@ -45,11 +37,8 @@ function drawBackgroundGrid(ctx) {
   ctx.restore();
 }
 
-/**
- * Vágányhálózat éleinek (talpfák és sínszálak) kirajzolása
- */
+// Vágányok és talpfák kirajzolása
 function drawTrackEdges(ctx, state) {
-  // Meghatározzuk, mely élek aktívak jelenleg a váltók állása alapján
   const activeSwitchEdges = new Set();
   for (const sw of state.switches) {
     const activeEdgeId = sw.branches[sw.activeBranchIndex];
@@ -61,29 +50,28 @@ function drawTrackEdges(ctx, state) {
   for (const edge of state.edges) {
     const geom = getEdgeGeometry(state, edge.id);
     const toNode = geom.toNode;
-    const isDeadEndBranch = toNode.type === 'deadend';
-    const isSwitchControlled = state.switches.some((sw) => sw.branches.includes(edge.id));
-    const isActiveBranch = !isSwitchControlled || activeSwitchEdges.has(edge.id);
+    const isDeadEnd = toNode.type === 'deadend';
+    const isControlled = state.switches.some((sw) => sw.branches.includes(edge.id));
+    const isActive = !isControlled || activeSwitchEdges.has(edge.id);
 
     ctx.save();
 
-    // Alap ágyazat
     ctx.beginPath();
     ctx.moveTo(geom.fromNode.x, geom.fromNode.y);
     ctx.lineTo(geom.toNode.x, geom.toNode.y);
-    ctx.strokeStyle = isDeadEndBranch ? 'rgba(127, 29, 29, 0.45)' : 'rgba(51, 65, 85, 0.65)';
+    ctx.strokeStyle = isDeadEnd ? 'rgba(127, 29, 29, 0.45)' : 'rgba(51, 65, 85, 0.65)';
     ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Talpfák kirajzolása koordináta-transzformációval
+    // Talpfák kirajzolása
     const sleeperStep = 16;
-    const steps = Math.floor(geom.length / sleeperStep);
+    const count = Math.floor(geom.length / sleeperStep);
     ctx.strokeStyle = 'rgba(71, 85, 105, 0.75)';
     ctx.lineWidth = 2;
 
-    for (let i = 1; i < steps; i += 1) {
-      const t = i / steps;
+    for (let i = 1; i < count; i += 1) {
+      const t = i / count;
       const pt = lerp2D(geom.fromNode, geom.toNode, t);
       ctx.save();
       ctx.translate(pt.x, pt.y);
@@ -95,17 +83,16 @@ function drawTrackEdges(ctx, state) {
       ctx.restore();
     }
 
-    // Fő sínszál
     ctx.beginPath();
     ctx.moveTo(geom.fromNode.x, geom.fromNode.y);
     ctx.lineTo(geom.toNode.x, geom.toNode.y);
-    if (isDeadEndBranch) {
-      ctx.strokeStyle = isActiveBranch ? '#f87171' : '#64748b';
+    if (isDeadEnd) {
+      ctx.strokeStyle = isActive ? '#f87171' : '#64748b';
       ctx.setLineDash([7, 5]);
     } else {
-      ctx.strokeStyle = isActiveBranch ? '#94a3b8' : '#475569';
+      ctx.strokeStyle = isActive ? '#94a3b8' : '#475569';
     }
-    ctx.lineWidth = isActiveBranch ? 4.5 : 3;
+    ctx.lineWidth = isActive ? 4.5 : 3;
     ctx.lineCap = 'round';
     ctx.stroke();
 
@@ -113,9 +100,7 @@ function drawTrackEdges(ctx, state) {
   }
 }
 
-/**
- * Belépési pontok, végállomások (peronok) és nyitott vágányvégek kirajzolása
- */
+// Belépési pontok, célperonok és vágányvégek
 function drawTrackTerminals(ctx, state) {
   for (const node of state.nodes) {
     if (node.type === 'entry') {
@@ -142,7 +127,6 @@ function drawTrackTerminals(ctx, state) {
       ctx.save();
       ctx.translate(node.x, node.y);
 
-      // Peron épület blokk
       ctx.fillStyle = colorInfo.hex;
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
@@ -151,7 +135,6 @@ function drawTrackTerminals(ctx, state) {
       ctx.fill();
       ctx.stroke();
 
-      // Peron felirat
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 13px "Segoe UI", sans-serif';
       ctx.textAlign = 'left';
@@ -163,7 +146,6 @@ function drawTrackTerminals(ctx, state) {
       ctx.save();
       ctx.translate(node.x, node.y);
 
-      // Ütközőbak (nyitott vágányvég)
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -184,9 +166,7 @@ function drawTrackTerminals(ctx, state) {
   }
 }
 
-/**
- * Váltók (kör alakú csomópontok és aktív irányjelző szegmensek) kirajzolása
- */
+// Váltók és az aktív irányt mutató nyíl kirajzolása
 function drawSwitches(ctx, state) {
   for (const sw of state.switches) {
     const node = getNodeById(state, sw.nodeId);
@@ -200,7 +180,6 @@ function drawSwitches(ctx, state) {
     ctx.save();
     ctx.translate(node.x, node.y);
 
-    // Külső kör
     ctx.beginPath();
     ctx.arc(0, 0, 17, 0, Math.PI * 2);
     ctx.fillStyle = '#0b192c';
@@ -209,7 +188,6 @@ function drawSwitches(ctx, state) {
     ctx.strokeStyle = '#38bdf8';
     ctx.stroke();
 
-    // Aktív kimeneti irányt mutató vizuális szegmens / nyíl
     if (activeGeom) {
       ctx.save();
       ctx.rotate(activeGeom.angle);
@@ -222,7 +200,6 @@ function drawSwitches(ctx, state) {
       ctx.lineTo(13, 0);
       ctx.stroke();
 
-      // Nyílhegy
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath();
       ctx.moveTo(15, 0);
@@ -234,7 +211,6 @@ function drawSwitches(ctx, state) {
       ctx.restore();
     }
 
-    // Váltó azonosító címke a kör alatt
     ctx.fillStyle = '#7dd3fc';
     ctx.font = 'bold 11px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
@@ -245,9 +221,7 @@ function drawSwitches(ctx, state) {
   }
 }
 
-/**
- * Kétoptikás vasúti fényjelzők (Vörös / Zöld) kirajzolása
- */
+// Kétoptikás fényjelzők (Vörös / Zöld)
 function drawSignals(ctx, state) {
   for (const sig of state.signals) {
     const pos = getSignalPosition(state, sig);
@@ -255,7 +229,6 @@ function drawSignals(ctx, state) {
     ctx.save();
     ctx.translate(pos.trackX, pos.trackY);
 
-    // Megállási vonal a sínen, ha a jelző vörös (TILOS)
     if (!sig.isGreen) {
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 3;
@@ -265,7 +238,6 @@ function drawSignals(ctx, state) {
       ctx.stroke();
     }
 
-    // Jelzőoszlop
     ctx.strokeStyle = '#94a3b8';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
@@ -273,7 +245,6 @@ function drawSignals(ctx, state) {
     ctx.lineTo(0, -14);
     ctx.stroke();
 
-    // Kétoptikás lámpafej doboza
     ctx.fillStyle = '#111827';
     ctx.strokeStyle = sig.isGreen ? '#10b981' : '#ef4444';
     ctx.lineWidth = 1.8;
@@ -282,7 +253,7 @@ function drawSignals(ctx, state) {
     ctx.fill();
     ctx.stroke();
 
-    // Felső optika: VÖRÖS (Megállj!)
+    // Felső lámpa: Vörös
     ctx.beginPath();
     ctx.arc(0, -34, 5.2, 0, Math.PI * 2);
     if (!sig.isGreen) {
@@ -295,7 +266,7 @@ function drawSignals(ctx, state) {
     }
     ctx.fill();
 
-    // Alsó optika: ZÖLD (Szabad!)
+    // Alsó lámpa: Zöld
     ctx.beginPath();
     ctx.arc(0, -21, 5.2, 0, Math.PI * 2);
     if (sig.isGreen) {
@@ -309,7 +280,6 @@ function drawSignals(ctx, state) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Jelző címke
     ctx.fillStyle = '#cbd5e1';
     ctx.font = 'bold 10px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
@@ -319,9 +289,7 @@ function drawSignals(ctx, state) {
   }
 }
 
-/**
- * Ütközésveszély (75px biztonsági zóna) korai figyelmeztető auráinak kirajzolása
- */
+// 75px-es biztonsági zóna figyelmeztető körök
 function drawCollisionWarnings(ctx, state) {
   if (!state.dangerPairs || state.dangerPairs.length === 0) {
     return;
@@ -336,7 +304,6 @@ function drawCollisionWarnings(ctx, state) {
       ? `rgba(239, 68, 68, ${0.12 + pulse * 0.14})`
       : `rgba(245, 158, 11, ${0.1 + pulse * 0.12})`;
 
-    // Veszélyzóna a két vonat körül
     for (const train of [pair.trainA, pair.trainB]) {
       ctx.save();
       ctx.translate(train.x, train.y);
@@ -351,7 +318,6 @@ function drawCollisionWarnings(ctx, state) {
       ctx.restore();
     }
 
-    // Összekötő figyelmeztető tengely
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(pair.trainA.x, pair.trainA.y);
@@ -366,14 +332,12 @@ function drawCollisionWarnings(ctx, state) {
     ctx.fillStyle = strokeColor;
     ctx.font = 'bold 11px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`⚠ VESZÉLY (${Math.round(pair.distance)}px)`, midX, midY);
+    ctx.fillText(`VESZÉLY (${Math.round(pair.distance)}px)`, midX, midY);
     ctx.restore();
   }
 }
 
-/**
- * Mozgó és várakozó szerelvények kirajzolása
- */
+// Vonatok kirajzolása
 function drawTrains(ctx, state) {
   for (const train of state.trains) {
     if (!train.active) {
@@ -385,7 +349,6 @@ function drawTrains(ctx, state) {
     ctx.save();
     ctx.translate(train.x, train.y);
 
-    // Szerelvény fő teste (mozdony korong + irányjelző)
     ctx.save();
     ctx.rotate(train.angle);
 
@@ -394,7 +357,6 @@ function drawTrains(ctx, state) {
     ctx.fillStyle = colorInfo.hex;
     ctx.fill();
 
-    // Ha tilos jelzőnél áll, a keret vörösre vált
     if (train.waitingAtSignal) {
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = '#ef4444';
@@ -407,7 +369,6 @@ function drawTrains(ctx, state) {
     }
     ctx.stroke();
 
-    // Haladási irányt mutató fehér fényszóró/nyíl a mozdony elején
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.moveTo(9, 0);
@@ -418,7 +379,6 @@ function drawTrains(ctx, state) {
 
     ctx.restore();
 
-    // Állapotjelző felirat a vonat felett (FÉK vagy TILOS)
     if (train.manualBrake || train.waitingAtSignal) {
       const badgeText = train.manualBrake ? 'FÉK' : 'TILOS';
       const badgeColor = train.manualBrake ? '#fbbf24' : '#f87171';
@@ -438,7 +398,6 @@ function drawTrains(ctx, state) {
       ctx.fillText(badgeText, 0, -23.5);
     }
 
-    // Vonat azonosítója a szerelvény alatt
     ctx.fillStyle = '#cbd5e1';
     ctx.font = 'bold 10px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
@@ -449,9 +408,7 @@ function drawTrains(ctx, state) {
   }
 }
 
-/**
- * Katasztrófa (Ütközés) robbanás ikonjának kirajzolása
- */
+// Ütközési robbanás rajzolása
 function drawExplosion(ctx, state) {
   if (!state.explosion) {
     return;
@@ -461,7 +418,6 @@ function drawExplosion(ctx, state) {
   ctx.save();
   ctx.translate(x, y);
 
-  // Csillag alakú robbanás
   const spikes = 12;
   const outerR = 36;
   const innerR = 16;
@@ -489,14 +445,11 @@ function drawExplosion(ctx, state) {
   ctx.font = 'bold 13px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('💥 ÜTKÖZÉS!', 0, -46);
+  ctx.fillText('ÜTKÖZÉS!', 0, -46);
 
   ctx.restore();
 }
 
-/**
- * Lebegő eseményfeliratok (Célba ért, Kisiklás, Téves peron) kirajzolása
- */
 function drawVisualEffects(ctx, state) {
   for (const fx of state.visualEffects) {
     const progress = fx.age / fx.duration;
@@ -525,9 +478,6 @@ function drawVisualEffects(ctx, state) {
   }
 }
 
-/**
- * Holtpont (Deadlock) figyelmeztető jelvény a Canvas felső részén
- */
 function drawDeadlockBanner(ctx, state) {
   if (!state.deadlockWarning) {
     return;
@@ -544,13 +494,10 @@ function drawDeadlockBanner(ctx, state) {
   ctx.font = 'bold 12px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('⚠ FIGYELEM: Minden vonat megállt! Oldd fel a féket vagy adj szabad jelzést!', 0, 0);
+  ctx.fillText('FIGYELEM: Minden vonat áll! Oldd fel a féket vagy adj szabad jelzést!', 0, 0);
   ctx.restore();
 }
 
-/**
- * Fő deklaratív megjelenítő függvény: Canvas 2D + HUD frissítése az állapottér alapján
- */
 export function render(ctx, state) {
   if (!ctx || !state) {
     return;
@@ -572,9 +519,6 @@ export function render(ctx, state) {
   updateHudElements(state);
 }
 
-/**
- * A HUD szöveges mezőinek deklaratív frissítése
- */
 export function updateHudElements(state) {
   const playerEl = document.querySelector('#hud-player-name');
   const levelEl = document.querySelector('#hud-level-name');
@@ -607,7 +551,7 @@ export function updateHudElements(state) {
   }
 
   if (pauseBtn) {
-    pauseBtn.textContent = state.status === 'paused' ? '▶ Folytatás' : '⏸ Szünet';
+    pauseBtn.textContent = state.status === 'paused' ? 'Folytatás' : 'Szünet';
   }
 
   if (nextTrainEl) {
@@ -617,7 +561,7 @@ export function updateHudElements(state) {
       const remainingSec = Math.max(0, Math.ceil(upcoming.spawnTime - state.elapsedTime));
       nextTrainEl.textContent = `Következő: ${upcoming.id} (${colorInfo.name}) ${remainingSec} mp múlva`;
     } else {
-      nextTrainEl.textContent = 'Minden szerelvény belépett a pályára';
+      nextTrainEl.textContent = 'Minden vonat a pályán';
     }
   }
 
@@ -627,9 +571,6 @@ export function updateHudElements(state) {
   }
 }
 
-/**
- * A helyi ranglista (Diszpécserek Dicsőségkönyve) táblázatának frissítése
- */
 export function renderLeaderboard(entries, selectedLevelId) {
   const tbody = document.querySelector('#leaderboard-tbody');
   const tabButtons = document.querySelectorAll('#leaderboard-tabs .tab-btn');
@@ -650,7 +591,7 @@ export function renderLeaderboard(entries, selectedLevelId) {
     const td = document.createElement('td');
     td.colSpan = 5;
     td.className = 'empty-row';
-    td.textContent = 'Még nincs rögzített eredmény ezen a pályán.';
+    td.textContent = 'Még nincs mentett eredmény ezen a szinten.';
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
@@ -680,9 +621,6 @@ export function renderLeaderboard(entries, selectedLevelId) {
   });
 }
 
-/**
- * Győzelmi vagy baleseti (Game Over) modális kártya megjelenítése
- */
 export function showOutcomeModal(state) {
   const modal = document.querySelector('#outcome-modal');
   const iconEl = document.querySelector('#outcome-icon');
@@ -702,12 +640,12 @@ export function showOutcomeModal(state) {
   const isPerfect = state.status === 'victory' && state.errorCount === 0;
 
   if (iconEl) {
-    iconEl.textContent = isGameOver ? '💥' : (isPerfect ? '🏆' : '⚠️');
+    iconEl.textContent = isGameOver ? 'X' : (isPerfect ? 'OK' : '!');
   }
   if (titleEl) {
     titleEl.textContent = isGameOver
       ? 'Katasztrófa – Game Over!'
-      : (isPerfect ? 'Sikeres Forgalomirányítás!' : 'Szimuláció Teljesítve (Hibapontokkal)');
+      : (isPerfect ? 'Sikeres teljesítés!' : 'Pálya teljesítve (hibapontokkal)');
   }
   if (msgEl) {
     msgEl.textContent = state.outcomeReason;
@@ -731,9 +669,6 @@ export function showOutcomeModal(state) {
   modal.classList.remove('hidden');
 }
 
-/**
- * Eseményértesítő modális kártya elrejtése
- */
 export function hideOutcomeModal() {
   const modal = document.querySelector('#outcome-modal');
   if (modal) {
