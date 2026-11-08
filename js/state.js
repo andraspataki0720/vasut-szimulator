@@ -1,15 +1,19 @@
-// Állapottér, pályagráfok és fizikai számítások (DOM hívások nélkül)
+// state.js - Állapottér, pályagráfok és fizikai számítások
+// Fontos: ebben a fájlban nincs semmilyen felületi (oldal) lekérdezés, csak tiszta adat és matematika!
 
+// A rajzvászon fix belső felbontása pixelben
 export const CANVAS_WIDTH = 1040;
 export const CANVAS_HEIGHT = 540;
 
-export const WARNING_DISTANCE = 75;
-export const CRITICAL_WARNING_DISTANCE = 46;
-export const COLLISION_DISTANCE = 25;
-export const SWITCH_HIT_RADIUS = 22;
-export const SIGNAL_HIT_RADIUS = 22;
-export const TRAIN_HIT_RADIUS = 20;
+// Ütközés és kattintás érzékelési távolságok (pixelben)
+export const WARNING_DISTANCE = 75;          // 75px alatt megjelenik a sárga/piros veszélyzóna
+export const CRITICAL_WARNING_DISTANCE = 46; // 46px alatt sárga helyett már vörösen villog a veszélyzóna
+export const COLLISION_DISTANCE = 25;        // 25px alatt a két vonat összeütközik -> Game Over
+export const SWITCH_HIT_RADIUS = 22;         // Váltó kattintási sugara
+export const SIGNAL_HIT_RADIUS = 22;         // Fényjelző kattintási sugara
+export const TRAIN_HIT_RADIUS = 20;          // Vonat kattintási sugara (jobb klikkes vészfékhez)
 
+// A vonatok és peronok színkódjai
 export const COLORS = {
   red: { key: 'red', name: 'Piros', hex: '#ef4444', border: '#fecaca' },
   blue: { key: 'blue', name: 'Kék', hex: '#3b82f6', border: '#bfdbfe' },
@@ -17,22 +21,26 @@ export const COLORS = {
   green: { key: 'green', name: 'Zöld', hex: '#10b981', border: '#a7f3d0' }
 };
 
-// 2D lineáris interpoláció két pont között (t: 0..1)
+// 2D lineáris vektorinterpoláció (LERP):
+// Kiszámolja egy vágányszakasz (p1 -> p2) köztes pontját a t (0..1) előrehaladás alapján.
+// Képlet: P(t) = P1 + (P2 - P1) * t
 export function lerp2D(p1, p2, t) {
-  const clamped = Math.max(0, Math.min(1, t));
+  const clamped = Math.max(0, Math.min(1, t)); // t értékét 0 és 1 közé szorítjuk
   return {
     x: p1.x + (p2.x - p1.x) * clamped,
     y: p1.y + (p2.y - p1.y) * clamped
   };
 }
 
-// Két pont távolsága (Pitagorasz-tétel)
+// Euklideszi távolságszámítás két pont között (Pitagorasz-tétel):
+// Ezt használjuk az ütközésvizsgálathoz (75px / 25px) és a kattintások találatához is.
 export function euclideanDistance(p1, p2) {
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
-  return Math.hypot(dx, dy);
+  return Math.hypot(dx, dy); // ugyanaz, mint a Math.sqrt(dx * dx + dy * dy)
 }
 
+// Másodpercek átalakítása perc:másodperc (MM:SS) formátumba a stopperórához
 export function formatTimeMMSS(totalSeconds) {
   const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const mins = Math.floor(sec / 60);
@@ -40,7 +48,12 @@ export function formatTimeMMSS(totalSeconds) {
   return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
 }
 
-// A 3 beépített pálya adatai
+// A 3 nehézségi szint fix topológiájú gráf-definíciója:
+// - nodes: csomópontok (belépő, váltó, töréspont, peron, csonkavágány)
+// - edges: vágányszakaszok (melyik csomóponttól melyikig megy a sín)
+// - switches: váltók (branches tömb tárolja a kimeneti éleket, activeBranchIndex az aktuális állást)
+// - signals: kétoptikás jelzőlámpák (melyik élen, milyen százalékos pozíciónál állnak)
+// - schedule: menetrend (mikor, melyik belépőn, milyen sebességgel és színnel indul a vonat)
 export const LEVEL_DEFINITIONS = {
   1: {
     id: 1,
@@ -186,6 +199,7 @@ export const LEVEL_DEFINITIONS = {
   }
 };
 
+// Segédfüggvények csomópont és él megkereséséhez azonosító (id) alapján
 export function getNodeById(state, nodeId) {
   return state.nodes.find((n) => n.id === nodeId) || null;
 }
@@ -194,7 +208,8 @@ export function getEdgeById(state, edgeId) {
   return state.edges.find((e) => e.id === edgeId) || null;
 }
 
-// Él hossza, irányvektora és szöge
+// Egy vágányszakasz (él) geometriai adatainak kiszámítása:
+// visszaadja a kezdő- és végpontot, a szakasz hosszát pixelben, az egységvektort és a dőlésszöget (radiánban).
 export function getEdgeGeometry(state, edgeId) {
   const edge = getEdgeById(state, edgeId);
   if (!edge) {
@@ -212,17 +227,20 @@ export function getEdgeGeometry(state, edgeId) {
   return { fromNode, toNode, length, dirX, dirY, angle };
 }
 
+// Kiszámolja egy fényjelző pontos (x, y) pozícióját a vágányon a progress (0..1) arány alapján
 export function getSignalPosition(state, signal) {
   const geom = getEdgeGeometry(state, signal.edgeId);
   const point = lerp2D(geom.fromNode, geom.toNode, signal.progress);
   return {
     x: point.x,
-    y: point.y - 24,
+    y: point.y - 24, // a lámpafej 24 pixellel a sín fölött jelenik meg
     trackX: point.x,
     trackY: point.y
   };
 }
 
+// Új játékállapot (state) létrehozása az adott szinthez:
+// lemásoljuk (klónozzuk) a pálya elemeit, hogy az eredeti LEVEL_DEFINITIONS ne módosuljon játék közben.
 export function createGameState(levelId = 1, playerName = 'Játékos') {
   const id = Number(levelId) || 1;
   const def = LEVEL_DEFINITIONS[id];
@@ -236,7 +254,7 @@ export function createGameState(levelId = 1, playerName = 'Játékos') {
     levelName: def.name,
     difficulty: def.difficulty,
     fullTitle: def.fullTitle,
-    status: 'running',
+    status: 'running', // lehetséges értékek: 'running', 'paused', 'victory', 'gameover'
     elapsedTime: 0,
     totalTrains: def.schedule.length,
     arrivedCount: 0,
@@ -259,11 +277,14 @@ export function createGameState(levelId = 1, playerName = 'Játékos') {
   };
 }
 
+// Rövid ideig látható felugró felirat a vásznon (pl. "CÉLBA ÉRT", "KISIKLÁS!")
 function addVisualEffect(state, x, y, text, color, duration = 2.2) {
   state.visualEffects.push({ x, y, text, color, age: 0, duration });
 }
 
+// Eldönti, hogy egy csomópontba (váltóba vagy töréspontba) érve melyik a következő vágányszakasz
 function resolveNextEdgeFromNode(state, node) {
+  // Ha váltóhoz ért a vonat, a váltó activeBranchIndex-e dönti el, merre megy tovább
   if (node.type === 'switch') {
     const sw = state.switches.find((s) => s.nodeId === node.id);
     if (!sw || !sw.branches[sw.activeBranchIndex]) {
@@ -272,6 +293,7 @@ function resolveNextEdgeFromNode(state, node) {
     return sw.branches[sw.activeBranchIndex];
   }
 
+  // Sima töréspontnál (waypoint) vagy belépőnél az egyetlen kimenő élt adjuk vissza
   if (node.type === 'waypoint' || node.type === 'entry') {
     const outEdge = state.edges.find((e) => e.from === node.id);
     return outEdge ? outEdge.id : null;
@@ -280,7 +302,8 @@ function resolveNextEdgeFromNode(state, node) {
   return null;
 }
 
-// Menetrend szerinti vonatindítás
+// Menetrend szerinti automatikus vonatindítás (spawning):
+// Ha az eltelt idő (elapsedTime) elérte a vonat spawnTime értékét, és szabad a belépő szakasz, elindítjuk.
 function updateTrainSpawning(state) {
   for (const item of state.schedule) {
     if (item.spawned) {
@@ -293,6 +316,7 @@ function updateTrainSpawning(state) {
         continue;
       }
 
+      // Megnézzük, nincs-e még túl közel egy előző vonat a belépőponthoz
       const blocked = state.trains.some(
         (t) => t.active && euclideanDistance(t, entryNode) < 68
       );
@@ -313,7 +337,7 @@ function updateTrainSpawning(state) {
         trainName: item.trainName,
         targetColor: item.targetColor,
         edgeId: firstEdgeId,
-        progress: 0.02,
+        progress: 0.02, // 0-tól 1-ig tart az adott élen belül
         x: geom.fromNode.x,
         y: geom.fromNode.y,
         dirX: geom.dirX,
@@ -338,12 +362,14 @@ function updateTrainSpawning(state) {
   }
 }
 
-// Egy vonat léptetése a gráfon
+// Egyetlen vonat mozgatása a delta idő (dt) alapján:
+// Kezeli a jobb klikkes vészféket, a vörös lámpa előtti megállást, az élek közti átlépést, a peronra érkezést és a kisiklást.
 function moveSingleTrain(state, train, dt) {
   if (!train.active) {
     return;
   }
 
+  // 1. Ha be van kapcsolva a jobb klikkes kézi vészfék, a vonat áll
   if (train.manualBrake) {
     train.speed = 0;
     train.waitingAtSignal = false;
@@ -353,12 +379,13 @@ function moveSingleTrain(state, train, dt) {
 
   const geom = getEdgeGeometry(state, train.edgeId);
 
-  // Vörös jelzőlámpa figyelése az adott élen
+  // 2. Ellenőrizzük, van-e az aktuális vágányszakaszon VÖRÖS (tilos) fényjelző a vonat előtt
   const signalOnEdge = state.signals.find((s) => s.edgeId === train.edgeId);
-  const stopOffset = 22 / geom.length;
+  const stopOffset = 22 / geom.length; // 22 pixellel a jelző előtt kell megállnia
 
   if (signalOnEdge && !signalOnEdge.isGreen) {
     const stopPos = Math.max(0.05, signalOnEdge.progress - stopOffset);
+    // Csak akkor állítjuk meg, ha a vonat még a jelző megállási pontja előtt van
     if (train.progress <= stopPos + 0.02) {
       const nextPos = train.progress + (train.baseSpeed * dt) / geom.length;
       if (nextPos >= stopPos) {
@@ -374,17 +401,21 @@ function moveSingleTrain(state, train, dt) {
     }
   }
 
+  // Ha nincs fék és nincs vörös jelző sem, a vonat a menetrendi sebességével halad
   train.waitingAtSignal = false;
   train.stateLabel = '';
   train.speed = train.baseSpeed;
 
+  // Az ebben a képkockában megteendő út pixelben: s = v * dt
   let remainingDist = train.baseSpeed * dt;
 
+  // Ciklus: ha a vonat egy lépésben túlérne az aktuális él végén, átlép a következő élre
   while (remainingDist > 0 && train.active) {
     const currentGeom = getEdgeGeometry(state, train.edgeId);
     const distToEnd = (1 - train.progress) * currentGeom.length;
 
     if (remainingDist < distToEnd) {
+      // Még ugyanazon a vágányszakaszon maradunk: növeljük a progress-t és LERP-pel számoljuk az (x, y) helyet
       train.progress += remainingDist / currentGeom.length;
       remainingDist = 0;
       const pos = lerp2D(currentGeom.fromNode, currentGeom.toNode, train.progress);
@@ -394,14 +425,17 @@ function moveSingleTrain(state, train, dt) {
       train.dirY = currentGeom.dirY;
       train.angle = currentGeom.angle;
     } else {
+      // Elértük a szakasz végén lévő csomópontot (targetNode)
       remainingDist -= distToEnd;
       const targetNode = currentGeom.toNode;
       train.x = targetNode.x;
       train.y = targetNode.y;
 
+      // A) Ha célállomásra (peronra) érkezett a vonat:
       if (targetNode.type === 'station') {
         train.active = false;
         if (targetNode.color === train.targetColor) {
+          // Saját színének megfelelő peron -> +1 célba ért vonat
           state.arrivedCount += 1;
           addVisualEffect(state, targetNode.x - 40, targetNode.y - 25, 'CÉLBA ÉRT', '#10b981');
           state.statusBanner = {
@@ -409,6 +443,7 @@ function moveSingleTrain(state, train, dt) {
             type: 'success'
           };
         } else {
+          // Rossz színű peronra érkezett -> +1 hibapont
           state.errorCount += 1;
           addVisualEffect(state, targetNode.x - 50, targetNode.y - 25, 'TÉVES PERON (+1 Hiba)', '#f59e0b');
           state.statusBanner = {
@@ -419,6 +454,7 @@ function moveSingleTrain(state, train, dt) {
         return;
       }
 
+      // B) Ha nyitott vágányvégre (csonkavágányra) futott -> Kisiklás (+1 hibapont)
       if (targetNode.type === 'deadend') {
         train.active = false;
         state.errorCount += 1;
@@ -430,6 +466,7 @@ function moveSingleTrain(state, train, dt) {
         return;
       }
 
+      // C) Ha váltóhoz vagy törésponthoz ért, lekérdezzük a következő élt
       const nextEdgeId = resolveNextEdgeFromNode(state, targetNode);
       if (!nextEdgeId) {
         train.active = false;
@@ -442,6 +479,7 @@ function moveSingleTrain(state, train, dt) {
         return;
       }
 
+      // Átlépés a következő vágányszakasz elejére (progress = 0)
       train.edgeId = nextEdgeId;
       train.progress = 0;
       const nextGeom = getEdgeGeometry(state, nextEdgeId);
@@ -452,7 +490,9 @@ function moveSingleTrain(state, train, dt) {
   }
 }
 
-// Ütközés és 75px-es veszélyzóna ellenőrzése
+// Páronkénti távolságellenőrzés minden aktív vonat között:
+// - 25px alatt (COLLISION_DISTANCE): tényleges ütközés -> robbanás és azonnali Game Over
+// - 75px alatt (WARNING_DISTANCE): korai figyelmeztetés -> bekerül a dangerPairs listába (sárga/piros aura)
 function checkCollisionsAndWarnings(state) {
   state.dangerPairs = [];
   const activeTrains = state.trains.filter((t) => t.active);
@@ -468,6 +508,7 @@ function checkCollisionsAndWarnings(state) {
       const tB = activeTrains[j];
       const dist = euclideanDistance(tA, tB);
 
+      // Fizikai összeütközés (Game Over)
       if (dist < COLLISION_DISTANCE) {
         tA.active = false;
         tB.active = false;
@@ -486,6 +527,7 @@ function checkCollisionsAndWarnings(state) {
         return;
       }
 
+      // 75px-es veszélyzóna (sárga vagy kritikus vörös figyelmeztetés)
       if (dist < WARNING_DISTANCE) {
         const severity = dist < CRITICAL_WARNING_DISTANCE ? 'critical' : 'warning';
         tA.inDanger = true;
@@ -515,6 +557,7 @@ function checkCollisionsAndWarnings(state) {
   }
 }
 
+// Ellenőrzi, hogy véget ért-e a menetrend (minden vonat elindult és már egy sincs mozgásban)
 function checkSimulationCompletion(state) {
   if (state.status !== 'running') {
     return;
@@ -523,12 +566,14 @@ function checkSimulationCompletion(state) {
   const allSpawned = state.schedule.every((item) => item.spawned);
   const activeTrains = state.trains.filter((t) => t.active);
 
+  // Ha minden kint lévő vonat áll (fékezve van vagy tilos jelzőnél vár), figyelmeztetést jelenítünk meg
   if (activeTrains.length > 0 && activeTrains.every((t) => t.manualBrake || t.waitingAtSignal)) {
     state.deadlockWarning = true;
   } else {
     state.deadlockWarning = false;
   }
 
+  // Ha az összes vonat lefutott ütközés nélkül -> Pálya teljesítve (victory)
   if (allSpawned && activeTrains.length === 0) {
     state.status = 'victory';
     if (state.errorCount === 0) {
@@ -543,14 +588,17 @@ function checkSimulationCompletion(state) {
   }
 }
 
+// Fő fizikai frissítő függvény, amit a játékhurok hív meg minden képkockán (60 FPS)
 export function updateSimulation(state, dt) {
   if (!state || state.status !== 'running') {
     return;
   }
 
+  // Biztonsági korlát a delta időre (ha pl. más fülre vált a felhasználó, ne ugorjanak nagyot a vonatok)
   const safeDt = Math.min(0.05, Math.max(0, Number(dt) || 0));
   state.elapsedTime += safeDt;
 
+  // Felugró szöveges effektek öregítése és törlése, ha lejárt az idejük
   for (let i = state.visualEffects.length - 1; i >= 0; i -= 1) {
     state.visualEffects[i].age += safeDt;
     if (state.visualEffects[i].age >= state.visualEffects[i].duration) {
@@ -570,7 +618,9 @@ export function updateSimulation(state, dt) {
   checkSimulationCompletion(state);
 }
 
-// Bal egérgomb: váltó vagy fényjelző átkapcsolása
+// Bal egérgombos kattintás kezelése a vásznon:
+// 1. Ha váltóra kattintottunk: ciklikusan léptetjük az irányt (ha épp vonat van rajta -> kisiklás!)
+// 2. Ha fényjelzőre kattintottunk: átváltjuk Zöld (Szabad) és Vörös (Megállj) között.
 export function handleCanvasLeftClick(state, canvasX, canvasY) {
   if (!state || (state.status !== 'running' && state.status !== 'paused')) {
     return false;
@@ -578,6 +628,7 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
 
   const clickPt = { x: canvasX, y: canvasY };
 
+  // Váltók ellenőrzése
   for (const sw of state.switches) {
     const node = getNodeById(state, sw.nodeId);
     if (!node) {
@@ -585,6 +636,7 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
     }
 
     if (euclideanDistance(clickPt, node) <= SWITCH_HIT_RADIUS) {
+      // Megnézzük, halad-e éppen vonat közvetlenül a váltó csomópontján (14px-en belül)
       const trainOnSwitch = state.trains.find(
         (t) => t.active && euclideanDistance(t, node) < 14
       );
@@ -600,6 +652,7 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
         return true;
       }
 
+      // Következő kimeneti ág kiválasztása maradékos osztással (ciklikus körbeforgás)
       sw.activeBranchIndex = (sw.activeBranchIndex + 1) % sw.branches.length;
       const activeEdge = getEdgeById(state, sw.branches[sw.activeBranchIndex]);
       const targetNode = activeEdge ? getNodeById(state, activeEdge.to) : null;
@@ -611,6 +664,7 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
     }
   }
 
+  // Fényjelzők ellenőrzése
   for (const sig of state.signals) {
     const sigPos = getSignalPosition(state, sig);
     const headPt = { x: sigPos.x, y: sigPos.y };
@@ -632,7 +686,8 @@ export function handleCanvasLeftClick(state, canvasX, canvasY) {
   return false;
 }
 
-// Jobb egérgomb: kézi vészfékezés
+// Jobb egérgombos kattintás kezelése a vásznon:
+// Ha egy aktív vonatra kattintottunk, be- vagy kikapcsoljuk rajta a kézi vészféket (manualBrake).
 export function handleCanvasRightClick(state, canvasX, canvasY) {
   if (!state || (state.status !== 'running' && state.status !== 'paused')) {
     return false;
@@ -661,6 +716,7 @@ export function handleCanvasRightClick(state, canvasX, canvasY) {
   return false;
 }
 
+// Játékállás előkészítése mentéshez (JSON-barát objektummá alakítás a localStorage számára)
 export function serializeState(state) {
   if (!state) {
     throw new Error('Nincs menthető állapot.');
@@ -707,11 +763,13 @@ export function serializeState(state) {
   };
 }
 
+// Elmentett játékállás visszaépítése a localStorage-ból beolvasott adatok alapján
 export function deserializeState(payload) {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Hibás mentési adat.');
   }
 
+  // Először felépítjük az adott szint alapgráfját, majd visszaírjuk bele a mentett állapotokat
   const restored = createGameState(payload.levelId, payload.playerName);
   restored.elapsedTime = Number(payload.elapsedTime) || 0;
   restored.arrivedCount = Number(payload.arrivedCount) || 0;

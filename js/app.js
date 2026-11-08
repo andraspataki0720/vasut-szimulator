@@ -1,4 +1,6 @@
-// Vezérlő modul: játékhurok, eseménykezelés, mentés/betöltés és ranglista
+// app.js - Vezérlő modul (Controller)
+// Feladata a 60 FPS játékhurok (requestAnimationFrame) futtatása, az eseménydelegálás,
+// valamint a játékállás és a ranglista mentése/betöltése (localStorage) hibakezeléssel.
 
 import {
   CANVAS_WIDTH,
@@ -20,9 +22,11 @@ import {
   hideOutcomeModal
 } from './render.js';
 
+// Kulcsok a böngésző localStorage tárolójához
 const STORAGE_KEY_SAVE = 'vasut_szimulator_saved_state_v2';
 const STORAGE_KEY_LEADERBOARD = 'vasut_szimulator_leaderboard_v2';
 
+// A vezérlő központi állapotobjektuma
 const appController = {
   state: null,
   ctx: null,
@@ -34,6 +38,7 @@ const appController = {
   outcomeHandled: false
 };
 
+// Pályánkénti ranglisták beolvasása localStorage-ból (try-catch védelemmel, ha sérült lenne a JSON)
 function loadAllLeaderboards() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_LEADERBOARD);
@@ -52,7 +57,8 @@ function loadAllLeaderboards() {
   }
 }
 
-// Új eredmény mentése a helyi ranglistába (hibapont, majd idő alapján rendezve)
+// Új eredmény mentése a helyi ranglistába:
+// Elsődlegesen a kevesebb hibapont (errorCount), másodlagosan a gyorsabb idő (elapsedSeconds) szerint rendezünk.
 function recordLeaderboardEntry(state) {
   try {
     const boards = loadAllLeaderboards();
@@ -79,6 +85,7 @@ function recordLeaderboardEntry(state) {
       return a.elapsedSeconds - b.elapsedSeconds;
     });
 
+    // Legfeljebb a legjobb 15 eredményt tartjuk meg szintenként
     boards[levelKey] = boards[levelKey].slice(0, 15);
     localStorage.setItem(STORAGE_KEY_LEADERBOARD, JSON.stringify(boards));
     refreshLeaderboardUI(appController.activeLeaderboardLevelId);
@@ -93,6 +100,7 @@ function refreshLeaderboardUI(levelId) {
   renderLeaderboard(boards[appController.activeLeaderboardLevelId] || [], appController.activeLeaderboardLevelId);
 }
 
+// A főmenüben kiírja, ha van korábban elmentett játékállás a böngészőben
 function refreshSavedGamePreview() {
   const previewEl = document.querySelector('#saved-game-preview');
   if (!previewEl) {
@@ -119,6 +127,7 @@ function refreshSavedGamePreview() {
   }
 }
 
+// Aktuális játékállás mentése JSON-ként a localStorage-ba
 function saveCurrentGame() {
   if (!appController.state) {
     return;
@@ -143,6 +152,7 @@ function saveCurrentGame() {
   }
 }
 
+// Mentett játékállás visszatöltése a localStorage-ból
 function loadSavedGame() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SAVE);
@@ -187,6 +197,7 @@ function loadSavedGame() {
   }
 }
 
+// SPA képernyőváltás a Kezdőképernyő (#start-screen) és a Játéktér (#game-screen) között oldalújratöltés nélkül
 function switchScreen(screenName) {
   const startScreen = document.querySelector('#start-screen');
   const gameScreen = document.querySelector('#game-screen');
@@ -207,6 +218,7 @@ function switchScreen(screenName) {
   }
 }
 
+// Új szimuláció indítása név-validációval
 function startNewSimulation(levelId, explicitPlayerName = null) {
   const nameInput = document.querySelector('#player-name-input');
   const nameError = document.querySelector('#name-error');
@@ -215,6 +227,7 @@ function startNewSimulation(levelId, explicitPlayerName = null) {
     ? explicitPlayerName
     : (nameInput ? nameInput.value.trim() : '');
 
+  // Ha üres a játékosnév, nem engedjük elindítani, hanem megjelenítjük a hibaüzenetet
   if (!candidateName) {
     if (nameInput) {
       nameInput.classList.add('input-invalid');
@@ -246,7 +259,8 @@ function startNewSimulation(levelId, explicitPlayerName = null) {
   }
 }
 
-// 60 FPS játékhurok
+// 60 FPS játékhurok (requestAnimationFrame):
+// Kiszámolja az előző képkocka óta eltelt időt másodpercben (dt), frissíti a fizikát, majd újrarajzolja a vásznat.
 function gameLoop(timestamp) {
   if (!appController.lastFrameTime) {
     appController.lastFrameTime = timestamp;
@@ -263,6 +277,7 @@ function gameLoop(timestamp) {
 
       render(appController.ctx, appController.state);
 
+      // Ha a futam véget ért (győzelem vagy ütközés), egyszer megjelenítjük az összegző modális ablakot
       if (
         (appController.state.status === 'victory' || appController.state.status === 'gameover') &&
         !appController.outcomeHandled
@@ -281,7 +296,8 @@ function gameLoop(timestamp) {
   appController.animationFrameId = requestAnimationFrame(gameLoop);
 }
 
-// Egérpozíció átszámítása a Canvas belső méretére
+// Átszámítja az egérkattintás képernyő-koordinátáit a Canvas belső (1040x540) koordináta-rendszerére,
+// így átméretezett böngészőablakban is hajszálpontos marad a kattintás.
 function getCanvasCoordinates(event) {
   const rect = appController.canvas.getBoundingClientRect();
   const scaleX = CANVAS_WIDTH / rect.width;
@@ -292,6 +308,7 @@ function getCanvasCoordinates(event) {
   };
 }
 
+// Eseménykezelők regisztrálása eseménydelegálással (a közös .app-shell konténeren)
 function setupEventDelegation() {
   const appShell = document.querySelector('.app-shell');
   const nameInput = document.querySelector('#player-name-input');
@@ -316,6 +333,7 @@ function setupEventDelegation() {
     });
   }
 
+  // Eseménydelegálás: egyetlen click figyelő kezeli a kártyákat, füleket és vezérlőgombokat a closest() segítségével
   if (appShell) {
     appShell.addEventListener('click', (event) => {
       const levelCard = event.target.closest('.level-card');
@@ -435,6 +453,7 @@ function setupEventDelegation() {
     });
   }
 
+  // Canvas egéresemények: bal klikk (váltó és fényjelző) + jobb klikk (vészfék, letiltott böngészőmenüvel)
   if (appController.canvas) {
     appController.canvas.addEventListener('click', (event) => {
       if (!appController.state) {
@@ -448,7 +467,7 @@ function setupEventDelegation() {
     });
 
     appController.canvas.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
+      event.preventDefault(); // Letiltja a böngésző alapértelmezett jobb klikkes menüjét a vásznon
       if (!appController.state) {
         return;
       }
@@ -461,6 +480,7 @@ function setupEventDelegation() {
   }
 }
 
+// Alkalmazás inicializálása (az ES6 module defer jellege miatt a DOM itt már automatikusan felépült)
 function initApp() {
   try {
     const canvas = document.querySelector('#railway-canvas');

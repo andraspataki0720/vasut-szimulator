@@ -1,10 +1,10 @@
 # Vasúti Forgalomirányító Szimulátor — WEBPROG Beadandó
 
 ## Hallgatói Adatok
-* **Név:** <Hallgató Neve>
-* **Neptun kód:** <NEPTUN>
+* **Név:** Pataki András
+* **Neptun kód:** AZMP85
 * **Szak / Képzés:** Programtervező informatikus BSc (ELTE IK)
-* **Bemutató videó linkje (OneDrive):** [Videó megtekintése](https://...)
+* **Bemutató videó linkje (OneDrive):** [Videó megtekintése](https://ikelte-my.sharepoint.com/:v:/g/personal/azmp85_inf_elte_hu/IQAzYos8iyzPQ7l4P4nefRX9AY6nbG-XoqMCTHrCjR7qnP4?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=xwFYfp)
 * **A futtatható program linkje (Vercel, Netlify, Firebase, stb.):** <https://andraspataki0720.github.io/vasut-szimulator/>
 
 ---
@@ -54,5 +54,5 @@ Tudomásul veszem, hogy a személyes szóbeli kódvédésen a kód minden egyes 
 - [x] Nincsenek getElementById, DOMContentLoaded, alert() hívások
 - [x] Tiszta Vanilla JS (nincs külső könyvtár vagy framework)
 - [x] Játékállás mentése és visszatöltése localStorage segítségével
-- [ ] A 3-5 perces narrált bemutató videó feltöltve és megosztható OneDrive linken
-- [ ] Online deployment, a program elérhető valamilyen online platformon, ennek elérhetőségét feltüntettem itt a README.md file elején
+- [x] A 3-5 perces narrált bemutató videó feltöltve és megosztható OneDrive linken
+- [x] Online deployment, a program elérhető valamilyen online platformon, ennek elérhetőségét feltüntettem itt a README.md file elején
